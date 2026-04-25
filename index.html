@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Room Scheduler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8 font-sans">
+
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-4xl font-bold text-gray-800 mb-8 text-center">Smart Meeting Scheduler</h1>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <div class="space-y-8">
+                
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-2xl font-semibold mb-4 border-b pb-2">1. Add a Room (Admin)</h2>
+                    <form id="roomForm" class="space-y-4">
+                        <input type="text" id="roomName" placeholder="Room Name (e.g., Boardroom)" class="w-full border p-2 rounded" required>
+                        <input type="number" id="roomCapacity" placeholder="Capacity (e.g., 10)" class="w-full border p-2 rounded" required>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="roomProjector" class="rounded">
+                            <span>Has Projector?</span>
+                        </label>
+                        <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition font-semibold">Add Room</button>
+                    </form>
+                    <div id="roomStatus" class="hidden mt-4 p-3 rounded font-semibold text-sm text-center"></div>
+                </div>
+
+                <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-purple-500">
+                    <h2 class="text-2xl font-semibold mb-4 border-b pb-2">2. Book a Meeting</h2>
+                    <form id="meetingForm" class="space-y-4">
+                        <input type="text" id="meetTitle" placeholder="Meeting Title" class="w-full border p-2 rounded" required>
+                        <input type="number" id="meetAttendees" placeholder="Number of Attendees" class="w-full border p-2 rounded" required>
+                        
+                        <div>
+                            <label class="text-sm text-gray-600 font-semibold">Meeting Date</label>
+                            <input type="date" id="meetDate" class="w-full border p-2 rounded bg-white text-gray-700 shadow-sm" required>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-sm text-gray-600 font-semibold">Start Time</label>
+                                <input type="time" id="meetStartTime" class="w-full border p-2 rounded bg-white text-gray-700 shadow-sm" required>
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-600 font-semibold">End Time</label>
+                                <input type="time" id="meetEndTime" class="w-full border p-2 rounded bg-white text-gray-700 shadow-sm" required>
+                            </div>
+                        </div>
+
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="meetProjector" class="rounded">
+                            <span>Requires Projector?</span>
+                        </label>
+                        <button type="submit" class="w-full bg-purple-600 text-white p-3 rounded hover:bg-purple-700 transition font-bold shadow-md">Instantly Check & Book Room</button>
+                    </form>
+                    <div id="meetingStatus" class="hidden mt-4 p-3 rounded font-semibold text-sm text-center"></div>
+                </div>
+            </div>
+
+            <div class="space-y-8">
+                
+                <div class="bg-white p-6 rounded-lg shadow-md h-full">
+                    <div class="flex justify-between items-center border-b pb-2 mb-4">
+                        <h2 class="text-2xl font-semibold text-gray-800">Live Schedule</h2>
+                        <button onclick="fetchBookings()" class="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition">Refresh</button>
+                    </div>
+                    <ul id="bookingsList" class="space-y-3">
+                        <li class="text-gray-500 italic text-center mt-10">No meetings booked yet.</li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        function showStatus(elementId, isSuccess, message) {
+            const el = document.getElementById(elementId);
+            el.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+            
+            if (isSuccess) {
+                el.classList.add('bg-green-100', 'text-green-800');
+                el.innerText = "✅ " + message;
+                setTimeout(() => { el.classList.add('hidden'); }, 5000);
+            } else {
+                el.classList.add('bg-red-100', 'text-red-800');
+                el.innerText = "❌ " + message;
+            }
+        }
+
+        document.getElementById('roomForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('roomName').value;
+            const capacity = document.getElementById('roomCapacity').value;
+            const has_projector = document.getElementById('roomProjector').checked;
+
+            try {
+                const response = await fetch(`/rooms/?name=${name}&capacity=${capacity}&has_projector=${has_projector}`, { method: 'POST' });
+                const data = await response.json();
+                if(response.ok) {
+                    showStatus('roomStatus', true, data.message);
+                    e.target.reset();
+                } else {
+                    showStatus('roomStatus', false, data.detail || "Failed to add room.");
+                }
+            } catch (err) {
+                showStatus('roomStatus', false, "Server connection error.");
+            }
+        });
+
+        document.getElementById('meetingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('meetTitle').value;
+            const attendees = document.getElementById('meetAttendees').value;
+            const needs_projector = document.getElementById('meetProjector').checked;
+            
+            const dateVal = document.getElementById('meetDate').value;
+            const startTimeVal = document.getElementById('meetStartTime').value;
+            const endTimeVal = document.getElementById('meetEndTime').value;
+
+            const start_str = `${dateVal} ${startTimeVal}`;
+            const end_str = `${dateVal} ${endTimeVal}`;
+
+            const url = `/requests/?title=${title}&attendees=${attendees}&needs_projector=${needs_projector}&start_str=${start_str}&end_str=${end_str}`;
+            
+            try {
+                const response = await fetch(url, { method: 'POST' });
+                const data = await response.json();
+                
+                if(response.ok) {
+                    showStatus('meetingStatus', true, data.message);
+                    e.target.reset();
+                    fetchBookings(); 
+                } else {
+                    showStatus('meetingStatus', false, data.detail);
+                }
+            } catch (err) {
+                showStatus('meetingStatus', false, "Server connection error.");
+            }
+        });
+
+        async function fetchBookings() {
+            const response = await fetch('/bookings/');
+            const bookings = await response.json();
+            const list = document.getElementById('bookingsList');
+            
+            list.innerHTML = ''; 
+            
+            if(bookings.length === 0) {
+                list.innerHTML = '<li class="text-gray-500 italic text-center mt-10">No meetings booked yet.</li>';
+                return;
+            }
+
+            bookings.forEach(b => {
+                const li = document.createElement('li');
+                li.className = "p-4 bg-white border-l-4 border-purple-500 rounded shadow-sm flex justify-between items-center";
+                
+                const startTime = b.start_time.split('T')[1].substring(0, 5);
+                const endTime = b.end_time.split('T')[1].substring(0, 5);
+                const date = b.start_time.split('T')[0];
+
+                li.innerHTML = `
+                    <div>
+                        <p class="font-bold text-gray-800 text-lg">${b.meeting_title}</p>
+                        <p class="text-sm text-gray-500 font-semibold">${date} | ${startTime} - ${endTime}</p>
+                    </div>
+                    <div class="bg-purple-100 text-purple-800 px-4 py-1 rounded-full text-sm font-bold shadow-inner">
+                        ${b.room_name}
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        window.onload = fetchBookings;
+    </script>
+</body>
+</html>
